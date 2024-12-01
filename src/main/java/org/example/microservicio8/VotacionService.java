@@ -81,7 +81,7 @@ public class VotacionService {
                 .subscribe(propuestas -> {
                     long acceptedTick = acceptedTickCounter.incrementAndGet();
                     logger.info("--------tic {}-----", acceptedTick);
-                    logger.info("Propuestas procesadas: {}", propuestas);
+                    logger.info("Ultima propuesta aceptada: {}", propuestas);
                     logger.info("Nombres de propuestas aceptadas: {}", nombresPropuestasAceptadas); // Imprimir nombres de propuestas aceptadas
                 });
     }
