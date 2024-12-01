@@ -14,15 +14,24 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class VotacionService {
     private static final Logger logger = LoggerFactory.getLogger(VotacionService.class);
-    private List<Votante> votantes = new ArrayList<>();
+    private final VotanteRepository votanteRepository;
+    private final PropuestasRepository propuestasRepository;
+
     private AtomicLong tickCounter = new AtomicLong(0);
     private AtomicLong acceptedTickCounter = new AtomicLong(0);
-    private List<Propuestas> propuestasAceptadas = new ArrayList<>();
     private Sinks.Many<Propuestas> propuestasSink = Sinks.many().multicast().onBackpressureBuffer();
+    private List<String> nombresPropuestasAceptadas = new ArrayList<>(); // ArrayList para nombres de propuestas aceptadas
 
-    public VotacionService() {
+    public VotacionService(VotanteRepository votanteRepository, PropuestasRepository propuestasRepository) {
+        this.votanteRepository = votanteRepository;
+        this.propuestasRepository = propuestasRepository;
+        inicializarVotantes();
+    }
+
+    private void inicializarVotantes() {
         for (long i = 1; i <= 30; i++) {
-            votantes.add(new Votante(i));
+            Votante votante = new Votante(i);
+            votanteRepository.save(votante);
         }
     }
 
@@ -33,39 +42,47 @@ public class VotacionService {
 
     public void procesarPropuesta() {
         Flux.interval(Duration.ofSeconds(4))
-            .flatMap(tick -> {
-                long currentTick = tickCounter.incrementAndGet();
-                Propuestas propuesta = new Propuestas(System.currentTimeMillis(), "Propuesta " + currentTick);
-                logger.info("--------tic {}-----", currentTick);
-                return Flux.fromIterable(votantes)
-                    .map(votante -> {
-                        boolean votoAFavor = votante.votar();
-                        logger.info("Votante {}: {}", votante.getId(), votoAFavor ? "a favor" : "en contra");
-                        return votoAFavor;
-                    })
-                    .collectList()
-                    .map(votos -> {
-                        long votosAFavor = votos.stream().filter(voto -> voto).count();
-                        if (votosAFavor >= 15) {
-                            logger.info("Propuesta {} ({}) aceptada", propuesta.getId(), propuesta.getNombre());
-                            propuestasAceptadas.add(propuesta);
-                            propuestasSink.tryEmitNext(propuesta);
-                        } else {
-                            logger.info("Propuesta {} ({}) rechazada", propuesta.getId(), propuesta.getNombre());
-                        }
-                        return votosAFavor;
-                    });
-            })
-            .subscribe();
+                .flatMap(tick -> {
+                    long currentTick = tickCounter.incrementAndGet();
+                    Propuestas propuesta = new Propuestas(null, "Propuesta " + currentTick);
+                    propuestasRepository.save(propuesta); // Guardar la propuesta en la base de datos
+
+                    logger.info("--------tic {}-----", currentTick);
+
+                    List<Votante> votantes = votanteRepository.findAll(); // Cargar todos los votantes
+                    return Flux.fromIterable(votantes)
+                            .map(votante -> {
+                                boolean votoAFavor = votante.votar();
+                                logger.info("Votante {}: {}", votante.getId(), votoAFavor ? "a favor" : "en contra");
+                                return votoAFavor;
+                            })
+                            .collectList()
+                            .map(votos -> {
+                                long votosAFavor = votos.stream().filter(voto -> voto).count();
+                                if (votosAFavor >= 15) {
+                                    propuesta.setAceptada(true);
+                                    logger.info("Propuesta {} ({}) aceptada", propuesta.getId(), propuesta.getNombre());
+                                    nombresPropuestasAceptadas.add(propuesta.getNombre()); // Añadir nombre a la lista
+                                    propuestasSink.tryEmitNext(propuesta);
+                                } else {
+                                    propuesta.setAceptada(false);
+                                    logger.info("Propuesta {} ({}) rechazada", propuesta.getId(), propuesta.getNombre());
+                                }
+                                propuestasRepository.save(propuesta); // Actualizar en la base de datos
+                                return votosAFavor;
+                            });
+                })
+                .subscribe();
     }
 
     public void procesarPropuestasAceptadas() {
         propuestasSink.asFlux()
-            .buffer(Duration.ofSeconds(4))
-            .subscribe(propuestas -> {
-                long acceptedTick = acceptedTickCounter.incrementAndGet();
-                logger.info("--------tic {}-----", acceptedTick);
-                logger.info("Propuestas aceptadas: {}", propuestasAceptadas);
-            });
+                .buffer(Duration.ofSeconds(4))
+                .subscribe(propuestas -> {
+                    long acceptedTick = acceptedTickCounter.incrementAndGet();
+                    logger.info("--------tic {}-----", acceptedTick);
+                    logger.info("Propuestas procesadas: {}", propuestas);
+                    logger.info("Nombres de propuestas aceptadas: {}", nombresPropuestasAceptadas); // Imprimir nombres de propuestas aceptadas
+                });
     }
 }

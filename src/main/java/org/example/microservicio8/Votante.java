@@ -14,13 +14,11 @@ public class Votante {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private transient Random random = new Random();
 
     @ManyToOne
     private Propuestas propuesta;
 
-    public Votante() {
-    }
+    public Votante() {}
 
     public Votante(Long id) {
         this.id = id;
@@ -43,6 +41,6 @@ public class Votante {
     }
 
     public boolean votar() {
-        return random.nextBoolean();
+        return Math.random() < 0.5; // Simula el voto aleatorio
     }
 }

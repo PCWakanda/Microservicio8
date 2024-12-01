@@ -13,13 +13,14 @@ public class Propuestas {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String nombre;
+    private boolean aceptada; // Nuevo campo
 
-    public Propuestas() {
-    }
+    public Propuestas() {}
 
     public Propuestas(Long id, String nombre) {
         this.id = id;
         this.nombre = nombre;
+        this.aceptada = false; // Por defecto, no aceptada
     }
 
     public Long getId() {
@@ -38,8 +39,16 @@ public class Propuestas {
         this.nombre = nombre;
     }
 
+    public boolean isAceptada() {
+        return aceptada;
+    }
+
+    public void setAceptada(boolean aceptada) {
+        this.aceptada = aceptada;
+    }
+
     @Override
     public String toString() {
-        return nombre;
+        return nombre + " (Aceptada: " + aceptada + ")";
     }
 }
