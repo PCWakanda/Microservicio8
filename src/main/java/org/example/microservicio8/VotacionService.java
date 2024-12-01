@@ -1,8 +1,9 @@
-// src/main/java/org/example/microservicio8/VotacionService.java
 package org.example.microservicio8;
-
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
@@ -10,24 +11,29 @@ import reactor.core.publisher.Sinks;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class VotacionService {
     private static final Logger logger = LoggerFactory.getLogger(VotacionService.class);
     private final VotanteRepository votanteRepository;
     private final PropuestasRepository propuestasRepository;
-
+    private final List<Propuestas> propuestasAceptadas = new ArrayList<>();
     private AtomicLong tickCounter = new AtomicLong(0);
     private AtomicLong acceptedTickCounter = new AtomicLong(0);
     private Sinks.Many<Propuestas> propuestasSink = Sinks.many().multicast().onBackpressureBuffer();
     private List<String> nombresPropuestasAceptadas = new ArrayList<>();
 
-    public VotacionService(VotanteRepository votanteRepository, PropuestasRepository propuestasRepository) {
+    @Autowired
+    public VotacionService(VotanteRepository votanteRepository, PropuestasRepository propuestasRepository, MeterRegistry meterRegistry) {
         this.votanteRepository = votanteRepository;
         this.propuestasRepository = propuestasRepository;
         inicializarVotantes();
+
+        Gauge.builder("accepted_proposals_count", propuestasAceptadas, List::size)
+                .description("Number of accepted proposals")
+                .register(meterRegistry);
     }
 
     private void inicializarVotantes() {
@@ -66,6 +72,7 @@ public class VotacionService {
                                     propuesta.setAceptada(true);
                                     logger.info("Propuesta {} ({}) aceptada", propuesta.getId(), propuesta.getNombre());
                                     nombresPropuestasAceptadas.add(propuesta.toString());
+                                    propuestasAceptadas.add(propuesta); // Añadir a la lista de propuestas aceptadas
                                     propuestasSink.tryEmitNext(propuesta);
                                 } else {
                                     propuesta.setAceptada(false);
