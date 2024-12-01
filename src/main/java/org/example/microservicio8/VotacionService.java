@@ -1,3 +1,4 @@
+// src/main/java/org/example/microservicio8/VotacionService.java
 package org.example.microservicio8;
 
 import org.slf4j.Logger;
@@ -10,6 +11,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class VotacionService {
@@ -20,7 +22,7 @@ public class VotacionService {
     private AtomicLong tickCounter = new AtomicLong(0);
     private AtomicLong acceptedTickCounter = new AtomicLong(0);
     private Sinks.Many<Propuestas> propuestasSink = Sinks.many().multicast().onBackpressureBuffer();
-    private List<String> nombresPropuestasAceptadas = new ArrayList<>(); // ArrayList para nombres de propuestas aceptadas
+    private List<String> nombresPropuestasAceptadas = new ArrayList<>();
 
     public VotacionService(VotanteRepository votanteRepository, PropuestasRepository propuestasRepository) {
         this.votanteRepository = votanteRepository;
@@ -44,12 +46,13 @@ public class VotacionService {
         Flux.interval(Duration.ofSeconds(4))
                 .flatMap(tick -> {
                     long currentTick = tickCounter.incrementAndGet();
-                    Propuestas propuesta = new Propuestas(null, "Propuesta " + currentTick);
-                    propuestasRepository.save(propuesta); // Guardar la propuesta en la base de datos
+                    int presupuesto = ThreadLocalRandom.current().nextInt(100000, 300001);
+                    Propuestas propuesta = new Propuestas(null, "Propuesta " + currentTick, presupuesto);
+                    propuestasRepository.save(propuesta);
 
                     logger.info("--------tic {}-----", currentTick);
 
-                    List<Votante> votantes = votanteRepository.findAll(); // Cargar todos los votantes
+                    List<Votante> votantes = votanteRepository.findAll();
                     return Flux.fromIterable(votantes)
                             .map(votante -> {
                                 boolean votoAFavor = votante.votar();
@@ -62,13 +65,13 @@ public class VotacionService {
                                 if (votosAFavor >= 15) {
                                     propuesta.setAceptada(true);
                                     logger.info("Propuesta {} ({}) aceptada", propuesta.getId(), propuesta.getNombre());
-                                    nombresPropuestasAceptadas.add(propuesta.getNombre()); // Añadir nombre a la lista
+                                    nombresPropuestasAceptadas.add(propuesta.toString());
                                     propuestasSink.tryEmitNext(propuesta);
                                 } else {
                                     propuesta.setAceptada(false);
                                     logger.info("Propuesta {} ({}) rechazada", propuesta.getId(), propuesta.getNombre());
                                 }
-                                propuestasRepository.save(propuesta); // Actualizar en la base de datos
+                                propuestasRepository.save(propuesta);
                                 return votosAFavor;
                             });
                 })
@@ -82,7 +85,7 @@ public class VotacionService {
                     long acceptedTick = acceptedTickCounter.incrementAndGet();
                     logger.info("--------tic {}-----", acceptedTick);
                     logger.info("Ultima propuesta aceptada: {}", propuestas);
-                    logger.info("Nombres de propuestas aceptadas: {}", nombresPropuestasAceptadas); // Imprimir nombres de propuestas aceptadas
+                    logger.info("Nombres de propuestas aceptadas: {}", nombresPropuestasAceptadas);
                 });
     }
 }
